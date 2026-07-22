@@ -15,11 +15,11 @@ Passes Klaus Dormann's 6502 functional test
 
 ## Running
 Compile with your choice of C compiler:
-```
+```bash
 gcc -O2 -o emulator main.c
 ```
 Place '6502_functional_test.bin' in the same directory then:  
-```
+```bash
 ./emulator
 ```
 If all goes right you should see:  
