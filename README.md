@@ -1,6 +1,6 @@
 # MOS-6502-Emulator  
 A 6502 emulator written in C  
-Should be a decent enough base to extend for NES, Atari, or C64 emulation
+Should be a decent enough base to extend for NES, Atari, or C64 emulation  
 Passes Klaus Dormann's 6502 functional test 
 
 ---
