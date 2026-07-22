@@ -836,9 +836,9 @@ int main(void) {
     // Infinite loop detection
     if (cpu.pc == last_pc) {
       if (cpu.pc == 0x3469) {
-        printf("\nSUCCESS! Passed all 6502 functional tests!\n");
+        printf("SUCCESS! Passed all 6502 functional tests!\n");
       } else {
-        printf("\nFAILED at PC: 0x%04X\n", cpu.pc);
+        printf("FAILED at PC: 0x%04X\n", cpu.pc);
       }
       break;
     }
