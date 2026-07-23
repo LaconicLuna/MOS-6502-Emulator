@@ -806,15 +806,43 @@ const Instruction lut[256] = {
     [0x40] = {addr_imp, op_rti},
 };
 
+// Base cycle counts per opcode no penalties yet
+static const uint8_t cycle_table[256] = {
+ // 0x0             0x1  0x2  0x3  0x4  0x5  0x6  0x7  0x8  0x9  0xA  0xB  0xC  0xD  0xE  0xF
+/*0x00*/  7,   6,   0,   0,   0,   3,   5,   0,   3,   2,   2,   0,   0,   4,   6,   0,
+/*0x10*/  2,   5,   0,   0,   0,   4,   6,   0,   2,   4,   0,   0,   0,   4,   7,   0,
+/*0x20*/  6,   6,   0,   0,   3,   3,   5,   0,   4,   2,   2,   0,   4,   4,   6,   0,
+/*0x30*/  2,   5,   0,   0,   0,   4,   6,   0,   2,   4,   0,   0,   0,   4,   7,   0,
+/*0x40*/  6,   6,   0,   0,   0,   3,   5,   0,   3,   2,   2,   0,   3,   4,   6,   0,
+/*0x50*/  2,   5,   0,   0,   0,   4,   6,   0,   2,   4,   0,   0,   0,   4,   7,   0,
+/*0x60*/  6,   6,   0,   0,   0,   3,   5,   0,   4,   2,   2,   0,   5,   4,   6,   0,
+/*0x70*/  2,   5,   0,   0,   0,   4,   6,   0,   2,   4,   0,   0,   0,   4,   7,   0,
+/*0x80*/  0,   6,   0,   0,   3,   3,   3,   0,   2,   0,   2,   0,   4,   4,   4,   0,
+/*0x90*/  2,   6,   0,   0,   4,   4,   4,   0,   2,   5,   2,   0,   0,   5,   0,   0,
+/*0xA0*/  2,   6,   2,   0,   3,   3,   3,   0,   2,   2,   2,   0,   4,   4,   4,   0,
+/*0xB0*/  2,   5,   0,   0,   4,   4,   4,   0,   2,   4,   2,   0,   4,   4,   4,   0,
+/*0xC0*/  2,   6,   0,   0,   3,   3,   5,   0,   2,   2,   2,   0,   4,   4,   6,   0,
+/*0xD0*/  2,   5,   0,   0,   0,   4,   6,   0,   2,   4,   0,   0,   0,   4,   7,   0,
+/*0xE0*/  2,   6,   0,   0,   3,   3,   5,   0,   2,   2,   2,   0,   4,   4,   6,   0,
+/*0xF0*/  2,   5,   0,   0,   0,   4,   6,   0,   2,   4,   0,   0,   0,   4,   7,   0,
+};
+
+static uint64_t total_cpu_cycles = 0;
+
 void cpu_step(CPU *cpu) {
-  uint8_t opcode = cpu_read(cpu, cpu->pc++);
-  Instruction instr = lut[opcode];
-  if (instr.exec != NULL && instr.get_addr != NULL) {
-    uint16_t addr = instr.get_addr(cpu);
-    instr.exec(cpu, addr);
-  } else {
-    printf("Unknown opcode 0x%02X at PC 0x%04X\n", opcode, cpu->pc - 1);
-  }
+    uint8_t opcode = cpu_read(cpu, cpu->pc++);
+    Instruction instr = lut[opcode];
+
+    if (instr.exec != NULL && instr.get_addr != NULL) {
+      uint16_t addr = instr.get_addr(cpu);
+      instr.exec(cpu, addr);
+    } else {
+      printf("Unknown opcode 0x%02X at PC 0x%04X\n", opcode, cpu->pc - 1);
+    }
+
+    uint8_t cycles = cycle_table[opcode];
+    if (cycles == 0) cycles = 2; // safety net for any unmapped/illegal opcode
+    total_cpu_cycles += cycles;
 }
 
 int main(void) {
@@ -837,6 +865,7 @@ int main(void) {
     if (cpu.pc == last_pc) {
       if (cpu.pc == 0x3469) {
         printf("SUCCESS! Passed all 6502 functional tests!\n");
+        printf("Total CPU Cycles (only base cycle no penalties):%llu\n",total_cpu_cycles);
       } else {
         printf("FAILED at PC: 0x%04X\n", cpu.pc);
       }
