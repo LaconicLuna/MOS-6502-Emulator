@@ -9,6 +9,7 @@ Passes Klaus Dormann's 6502 functional test
 - Full 6502 official instruction set
 - All addressing modes
 - Indirect JMP page-wrap bug
+- Base Cycle Counting (No Penalties so not cycle accurate)
 - Simple LUT-based opcode decoder
 
 ---
@@ -25,6 +26,7 @@ Place '6502_functional_test.bin' in the same directory then:
 If all goes right you should see:  
 ```
 SUCCESS! Passed all 6502 functional tests!
+Total CPU Cycles (only base cycle no penalties):95076039
 ```
 
 ---
