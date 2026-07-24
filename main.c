@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <time.h>
 
 #define FLAG_C (1 << 0) // Carry
 #define FLAG_Z (1 << 1) // Zero
@@ -23,6 +24,13 @@ typedef struct {
   // RAM 64kb just cause yknow
   uint8_t ram[0x10000];
 } CPU;
+
+static uint8_t extra_cycles = 0;
+static uint64_t total_cpu_cycles = 0;
+
+static inline bool page_crossed(uint16_t base, uint16_t offset) {
+  return ((base & 0xFF00) != ((base + offset) & 0xFF00));
+}
 
 // CPU HELPER FUNCTIONS
 static inline uint8_t cpu_read(CPU *cpu, uint16_t addr) {
@@ -71,60 +79,85 @@ void cpu_reset(CPU *cpu) {
 // ================================================
 //           ADDRESSING MODE HELPERS
 // ================================================
-uint16_t addr_imp(CPU *cpu) {
+uint16_t addr_imp(CPU *cpu, uint8_t opcode) {
+  (void)opcode;
   return 0;
 }
 
-uint16_t addr_imm(CPU *cpu) {
+uint16_t addr_imm(CPU *cpu, uint8_t opcode) {
+  (void)opcode;
   return cpu->pc++;
 }
 
-uint16_t addr_zp(CPU *cpu) {
+uint16_t addr_zp(CPU *cpu, uint8_t opcode) {
+  (void)opcode;
   return cpu_read(cpu, cpu->pc++);
 }
 
-uint16_t addr_zpx(CPU *cpu) {
+uint16_t addr_zpx(CPU *cpu, uint8_t opcode) {
+  (void)opcode;
   return (cpu_read(cpu, cpu->pc++) + cpu->x) & 0xFF;
 }
 
-uint16_t addr_abs(CPU *cpu) {
+uint16_t addr_abs(CPU *cpu, uint8_t opcode) {
+  (void)opcode;
   uint16_t lo = cpu_read(cpu, cpu->pc++);
   uint16_t hi = cpu_read(cpu, cpu->pc++);
   return (hi << 8) | lo;
 }
 
-uint16_t addr_absx(CPU *cpu) {
+uint16_t addr_absx(CPU *cpu, uint8_t opcode) {
   uint16_t lo = cpu_read(cpu, cpu->pc++);
   uint16_t hi = cpu_read(cpu, cpu->pc++);
-  return ((hi << 8) | lo) + cpu->x;
+  uint16_t base = (hi << 8) | lo;
+
+  //NO DYNAMIC PENALTY
+  if (opcode != 0x9D && page_crossed(base, cpu->x)) {
+    extra_cycles += 1;
+  }
+  return base + cpu->x;
 }
 
-uint16_t addr_absy(CPU *cpu) {
+uint16_t addr_absy(CPU *cpu, uint8_t opcode) {
   uint16_t lo = cpu_read(cpu, cpu->pc++);
   uint16_t hi = cpu_read(cpu, cpu->pc++);
-  return ((hi << 8) | lo) + cpu->y;
+  uint16_t base = (hi << 8) | lo;
+
+  //NO DYNAMIC PENALTY
+  if (opcode != 0x99 && page_crossed(base, cpu->y)) {
+    extra_cycles += 1;
+  }
+  return base + cpu->y;
 }
 
-uint16_t addr_izx(CPU *cpu) {
+uint16_t addr_izx(CPU *cpu, uint8_t opcode) {
+  (void)opcode;
   uint8_t ptr = (cpu_read(cpu, cpu->pc++) + cpu->x) & 0xFF;
   uint16_t lo = cpu_read(cpu, ptr);
   uint16_t hi = cpu_read(cpu, (ptr + 1) & 0xFF);
   return (hi << 8) | lo;
 }
 
-uint16_t addr_izy(CPU *cpu) {
+uint16_t addr_izy(CPU *cpu, uint8_t opcode) {
   uint8_t ptr = cpu_read(cpu, cpu->pc++);
   uint16_t lo = cpu_read(cpu, ptr);
   uint16_t hi = cpu_read(cpu, (ptr + 1) & 0xFF);
-  return ((hi << 8) | lo) + cpu->y;
+  uint16_t base = (hi << 8) | lo;
+
+  //NO DYNAMIC PENALTY
+  if (opcode != 0x91 && page_crossed(base, cpu->y)) {
+    extra_cycles += 1;
+  }
+  return base + cpu->y;
 }
 
-uint16_t addr_zpy(CPU *cpu) {
+uint16_t addr_zpy(CPU *cpu, uint8_t opcode) {
+  (void)opcode;
   return (cpu_read(cpu, cpu->pc++) + cpu->y) & 0xFF;
 }
 
-uint16_t addr_ind(CPU *cpu) {
-  uint16_t ptr = addr_abs(cpu);
+uint16_t addr_ind(CPU *cpu, uint8_t opcode) {
+  uint16_t ptr = addr_abs(cpu,opcode);
   uint8_t lo = cpu_read(cpu, ptr);
   uint8_t hi;
   if ((ptr & 0x00FF) == 0x00FF) {
@@ -136,7 +169,8 @@ uint16_t addr_ind(CPU *cpu) {
   return (hi << 8) | lo;
 }
 
-uint16_t addr_rel(CPU *cpu) {
+uint16_t addr_rel(CPU *cpu, uint8_t opcode) {
+  (void)opcode;
   int8_t offset = (int8_t)cpu_read(cpu, cpu->pc++);
   return cpu->pc + offset;
 }
@@ -537,10 +571,16 @@ void op_rts(CPU *cpu, uint16_t unused) {
 // =================== BRANCH =====================
 static void do_branch(CPU *cpu, uint16_t target_addr, bool condition) {
   if (condition) {
+    extra_cycles += 1; // +1 for taking branch
+
+    // +1 for page boundary crossing
+    if ((cpu->pc & 0xFF00) != (target_addr & 0xFF00)) {
+      extra_cycles += 1;
+    }
+
     cpu->pc = target_addr;
   }
 }
-
 void op_bcc(CPU *cpu, uint16_t addr) {
   do_branch(cpu, addr, (cpu->status & FLAG_C) == 0);
 }
@@ -625,7 +665,7 @@ void op_rti(CPU *cpu, uint16_t unused) {
 }
 
 typedef struct {
-  uint16_t (*get_addr)(CPU *);   // Pointer to addressing function
+  uint16_t (*get_addr)(CPU *, uint8_t);   // Pointer to addressing function
   void (*exec)(CPU *, uint16_t); // Pointer to operation function
 } Instruction;
 
@@ -806,7 +846,7 @@ const Instruction lut[256] = {
     [0x40] = {addr_imp, op_rti},
 };
 
-// Base cycle counts per opcode no penalties yet
+// Base cycle counts per opcode (no penalties)
 static const uint8_t cycle_table[256] = {
  // 0x0             0x1  0x2  0x3  0x4  0x5  0x6  0x7  0x8  0x9  0xA  0xB  0xC  0xD  0xE  0xF
 /*0x00*/  7,   6,   0,   0,   0,   3,   5,   0,   3,   2,   2,   0,   0,   4,   6,   0,
@@ -827,22 +867,19 @@ static const uint8_t cycle_table[256] = {
 /*0xF0*/  2,   5,   0,   0,   0,   4,   6,   0,   2,   4,   0,   0,   0,   4,   7,   0,
 };
 
-static uint64_t total_cpu_cycles = 0;
-
 void cpu_step(CPU *cpu) {
+    extra_cycles = 0;
     uint8_t opcode = cpu_read(cpu, cpu->pc++);
     Instruction instr = lut[opcode];
-
     if (instr.exec != NULL && instr.get_addr != NULL) {
-      uint16_t addr = instr.get_addr(cpu);
+      uint16_t addr = instr.get_addr(cpu, opcode);
       instr.exec(cpu, addr);
     } else {
       printf("Unknown opcode 0x%02X at PC 0x%04X\n", opcode, cpu->pc - 1);
     }
-
     uint8_t cycles = cycle_table[opcode];
-    if (cycles == 0) cycles = 2; // safety net for any unmapped/illegal opcode
-    total_cpu_cycles += cycles;
+    if (cycles == 0) cycles = 2;
+    total_cpu_cycles += cycles + extra_cycles;
 }
 
 int main(void) {
@@ -854,23 +891,21 @@ int main(void) {
   }
   fread(cpu.ram, 1, 0x10000, f);
   fclose(f);
-
-  // Set start address from test
   cpu.pc = 0x0400;
-  uint16_t last_pc = 0;
+  clock_t start_time = clock();
   while (1) {
-    last_pc = cpu.pc;
-    cpu_step(&cpu);
-    // Infinite loop detection
-    if (cpu.pc == last_pc) {
-      if (cpu.pc == 0x3469) {
-        printf("SUCCESS! Passed all 6502 functional tests!\n");
-        printf("Total CPU Cycles (only base cycle no penalties):%llu\n",total_cpu_cycles);
-      } else {
-        printf("FAILED at PC: 0x%04X\n", cpu.pc);
-      }
+    if (cpu.pc == 0x3469) {
+      printf("SUCCESS! Passed all 6502 functional tests!\n");
+      printf("Total CPU Cycles: %llu\n", (unsigned long long)total_cpu_cycles);
       break;
     }
+    cpu_step(&cpu);
   }
+  clock_t end_time = clock();
+  double elapsed_seconds = (double)(end_time - start_time) / CLOCKS_PER_SEC;
+  double mhz = ((double)total_cpu_cycles / elapsed_seconds) / 1000000.0;
+  printf("Executed %llu cycles in %.4f seconds!\n",
+         (unsigned long long)total_cpu_cycles, elapsed_seconds);
+  printf("Emulated Speed: %.2f MHz\n", mhz);
   return 0;
 }
