@@ -9,7 +9,7 @@ Passes Klaus Dormann's 6502 functional test
 - Full 6502 official instruction set
 - All addressing modes
 - Indirect JMP page-wrap bug
-- Base Cycle Counting (No Penalties so not cycle accurate)
+- Cycle Accurate (Pretty Sure 0_0)
 - Simple LUT-based opcode decoder
 
 ---
@@ -17,16 +17,18 @@ Passes Klaus Dormann's 6502 functional test
 ## Running
 Compile with your choice of C compiler:
 ```bash
-gcc -O2 -o emulator main.c
+gcc -O2 -o 6502 6502.c
 ```
 Place '6502_functional_test.bin' in the same directory then:  
 ```bash
-./emulator
+./6502
 ```
-If all goes right you should see:  
+If all goes right you should see(Xs depend on your hardware):  
 ```
 SUCCESS! Passed all 6502 functional tests!
-Total CPU Cycles (only base cycle no penalties):95076039
+Total CPU Cycles: 96241364
+Executed 96241364 cycles in X.XXXX seconds!
+Emulated Speed: XXX.XX MHz
 ```
 
 ---
@@ -43,5 +45,4 @@ Main references I used:
 ---
 
 ## Future Improvements:
-- Cycle accurate timing
-- Illegal/Unofficial Opcodes (Maybe?)
+- Illegal/Unofficial Opcodes (Maybe? probably not)
